@@ -4,6 +4,7 @@
 
 #define NUM_LRU 4
 #define NUM_WAY 4
+#define NUM_ADDR 96
 
 typedef struct tag {
 	uint32_t value;
@@ -19,6 +20,7 @@ typedef struct cache {
 void displayCache(Cache* c);
 void initialize(Cache* c);
 void LRU(int* lru, bool hit, int index);
+bool hit(uint32_t aTag, Cache c);
 
 int main(void) {
 
@@ -34,7 +36,24 @@ int main(void) {
 	Cache cache[4];
 	initialize(cache);
 
+	// Load addr into cache
+	for (int i = 0; i < NUM_ADDR; i++) {
+		// Parse values
+		uint32_t tagIndex = (addr[i] >> 4) & (0xff);
+		uint32_t dataIndex = (addr[i] >> 2) & (0x3ff);
+		uint32_t aTag = addr[i] >> 12;
+
+		// Check for hit
+
+;		printf("0x%x\t%d\n", addr[i], tagIndex);
+	}
+
 	return 0;
+
+}
+
+// Returns hit or miss if value is in cache
+bool hit(uint32_t aTag, Cache c) {
 
 }
 
