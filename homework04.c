@@ -22,6 +22,8 @@ void displayCache(Cache* c);
 void initialize(Cache* c);
 void LRU(int* lru, bool hit, int index);
 int hit(uint32_t aTag, Cache* c, uint32_t tagIndex);
+void LRUSim(uint32_t* addr, Cache* cache, int numHits);
+void PLRUSim(uint32_t* addr, Cache* cache, int numHits);
 
 int main(void) {
 
@@ -32,12 +34,30 @@ int main(void) {
 		0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2c0, 0x250, 0x27c, 0x370, 0x394, 0x2dc,
 		0x284, 0x250, 0x2ac };
 
-	int lru[4] = { 3, 2, 1, 0 };
-
+	// Initialize cache for LRU
 	Cache cache[4];
 	initialize(cache);
 
 	int numHits = 0;
+
+	LRUSim(addr, cache, numHits);
+
+	numHits = 0;
+
+	// Reset cache for PLRU
+	initialize(cache);
+
+	PLRUSim(addr, cache, numHits);
+
+	return 0;
+
+}
+
+
+// Simulates LRU cache
+void LRUSim(uint32_t* addr, Cache* cache, int numHits) {
+
+	int lru[4] = { 3, 2, 1, 0 };
 
 	// Load addr into cache
 	for (int i = 0; i < NUM_ADDR; i++) {
@@ -51,9 +71,6 @@ int main(void) {
 		uint32_t dataIndexUpdated = dataIndex & 0x3;
 		uint32_t aTag = addr[i] >> 6;
 
-		// Print parsed values
-		printf("0x%x\t%d\t%d\t%d\n", addr[i], tagIndex, dataIndex, aTag);
-
 		// Check for hit
 		int hitIndex = hit(aTag, cache, tagIndex);
 
@@ -64,7 +81,7 @@ int main(void) {
 			// Write to cache
 			cache[cacheIndex].tag[tagIndex].value = aTag;
 			cache[cacheIndex].tag[tagIndex].valid = 1;
-			
+
 			// Fill with fake data
 			for (int k = 0; k < 4; k++) {
 				cache[cacheIndex].tag[tagIndex].data[k] = k + 5;
@@ -74,19 +91,29 @@ int main(void) {
 			LRU(lru, false, hitIndex);
 		}
 		else {
+			cacheIndex = hitIndex;
+
 			// Update LRU
 			LRU(lru, true, hitIndex);
 			numHits++;
 		}
+
+		printf("    | Seq# %d   | Way# %d\n", i+1, (hitIndex == -1) ? cacheIndex : hitIndex);
+		printf("| V |   c.tag = %d |   c.data   |    c.data.index = %d\n", aTag, dataIndex);
+		printf("| %d |                    D0     |   c.tag.index  = %d\n", cache[cacheIndex].tag[tagIndex].valid, tagIndex);
+		printf("|   |                    D1     |  History Stack = %d,%d,%d,%d\n", lru[0], lru[1], lru[2], lru[3]);
+		printf("|   |                    D2     |         Status = %s\n", (hitIndex == -1) ? "Miss" : "Hit");
+		printf("|   |                    D3     |\n");
+		printf("\n\n");
+
 	}
 
 	printf("Number of hits: %d\n", numHits);
 	printf("LRU Efficiency: %f", ((float)numHits / 96) * 100);
-	numHits = 0;
+}
 
-	// Reset cache for PLRU
-	initialize(cache);
-
+// Simulate pseudo-LRU
+void PLRUSim(uint32_t* addr, Cache* cache, int numHits) {
 	// Initialize pseudo-LRU
 	int plru[3] = { 0 };
 
@@ -101,9 +128,6 @@ int main(void) {
 		// I only want first 2 bits of dataIndex due data array stored inside tag
 		uint32_t dataIndexUpdated = dataIndex & 0x3;
 		uint32_t aTag = addr[i] >> 6;
-
-		// Print parsed values
-		printf("0x%x\t%d\t%d\t%d\n", addr[i], tagIndex, dataIndex, aTag);
 
 		// Check for hit
 		int hitIndex = hit(aTag, cache, tagIndex);
@@ -127,15 +151,15 @@ int main(void) {
 			cacheIndex = PLRU(plru, true, hitIndex);
 			numHits++;
 		}
+
+		printf("    | Seq# %d   | Way# %d\n", i+1, (hitIndex == -1) ? cacheIndex : hitIndex);
+		printf("| V |   c.tag   |   c.data   |    c.data.index = %d\n", dataIndex);
+		printf("\n\n");
 	}
 
 	printf("Number of hits: %d\n", numHits);
-	printf("LRU Efficiency: %f", ((float)numHits / 96) * 100);
-
-	return 0;
-
+	printf("PLRU Efficiency: %f", ((float)numHits / 96) * 100);
 }
-
 // Update PLRU for least recent used set
 int PLRU(int* plru, bool hit, int hitIndex) {
 
@@ -215,26 +239,13 @@ int PLRU(int* plru, bool hit, int hitIndex) {
 int hit(uint32_t aTag, Cache* c, uint32_t tagIndex) {
 	// Loop through all caches
 	for (int i = 0; i < NUM_WAY; i++) {
-		if (((aTag & c[i].tag[tagIndex].value) == aTag) && (c[i].tag[tagIndex].valid == 1)) {
-			return i;
+		if (c[i].tag[tagIndex].valid == 1) {
+			if (c[i].tag[tagIndex].value == aTag) {
+				return i;
+			}
 		}
 	}
 	return -1;
-}
-
-// Print cache contents
-void displayCache(Cache* c) {
-	for (int i = 0; i < NUM_WAY; i++) {
-		printf("\n\nWay %d\n", i);
-		for (int j = 0; j < (sizeof(c[i].tag) / sizeof(c[i].tag[j])); j++) {
-			printf("Tag:\tValid: %d\tValue: %d\n", c[i].tag[j].valid, c[i].tag[j].value);
-
-			for (int l = 0; l < 4; l++) {
-				printf("Data: %d\n", c[i].tag[j].data[l]);
-			}
-		}
-		puts("\n\n\n");
-	}
 }
 
 // Sets all data and tag values to 0, sets all valid bits to 0
