@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #define NUM_LRU 4
 #define NUM_WAY 4
@@ -81,8 +82,132 @@ int main(void) {
 
 	printf("Number of hits: %d\n", numHits);
 	printf("LRU Efficiency: %f", ((float)numHits / 96) * 100);
+	numHits = 0;
+
+	// Reset cache for PLRU
+	initialize(cache);
+
+	// Initialize pseudo-LRU
+	int plru[3] = { 0 };
+
+	// Load addr into cache using PLRU
+	for (int i = 0; i < NUM_ADDR; i++) {
+
+		// Parse values
+		uint32_t cacheIndex = 0;
+		uint32_t tagIndex = (addr[i] >> 4) & 0x3;
+		uint32_t dataIndex = ((addr[i] >> 2) & 0xf);
+
+		// I only want first 2 bits of dataIndex due data array stored inside tag
+		uint32_t dataIndexUpdated = dataIndex & 0x3;
+		uint32_t aTag = addr[i] >> 6;
+
+		// Print parsed values
+		printf("0x%x\t%d\t%d\t%d\n", addr[i], tagIndex, dataIndex, aTag);
+
+		// Check for hit
+		int hitIndex = hit(aTag, cache, tagIndex);
+
+		// Update cache on miss and update PLRU
+		if (hitIndex == -1) {
+			cacheIndex = PLRU(plru, false, hitIndex);
+
+			// Write to cache
+			cache[cacheIndex].tag[tagIndex].value = aTag;
+			cache[cacheIndex].tag[tagIndex].valid = 1;
+
+			// Fill with fake data
+			for (int k = 0; k < 4; k++) {
+				cache[cacheIndex].tag[tagIndex].data[k] = k + 5;
+			}
+
+		}
+		else {
+			// Update PLRU
+			cacheIndex = PLRU(plru, true, hitIndex);
+			numHits++;
+		}
+	}
+
+	printf("Number of hits: %d\n", numHits);
+	printf("LRU Efficiency: %f", ((float)numHits / 96) * 100);
 
 	return 0;
+
+}
+
+// Update PLRU for least recent used set
+int PLRU(int* plru, bool hit, int hitIndex) {
+
+	int currentIndex = -1;
+
+	// Find current arrow positions
+	if (plru[0] == 0) {
+		currentIndex = plru[0] * 2 + plru[1];
+	}
+	else {
+		currentIndex = plru[0] * 2 + plru[2];
+	}
+
+	int temp = plru[0];
+	int temp1 = plru[1];
+	int temp2 = plru[2];
+
+	int resultSet = hitIndex;
+
+	// Change PRLU based on hit index (0 = left pointer, 1 = right pointer)
+	if (hit) {
+		// Check if current arrow position is same as hit index
+		if (currentIndex == hitIndex) {
+			// Adjust pointers
+			if (plru[0] == 0) {
+				plru[1] = plru[1] == 0 ? 1 : 0;
+				plru[0] = 1;
+			}
+			else {
+				plru[2] = plru[2] == 0 ? 1 : 0;
+				plru[0] = 0;
+
+			}
+		}
+		else {
+			// Only adjust bit of hit index
+			switch (hitIndex) {
+			case 0:
+				plru[1] = 1;
+				break;
+
+			case 1:
+				plru[1] = 0;
+				break;
+
+			case 2:
+				plru[2] = 1;
+				break;
+
+			case 3:
+				plru[2] = 0;
+				break;
+			}
+		}
+	}
+	else {
+		if (plru[0] == 0) {
+			resultSet = plru[0] * 2 + plru[1];
+
+			plru[1] = plru[1] == 0 ? 1 : 0;
+			plru[0] = 1;
+		}
+		else {
+			resultSet = plru[0] * 2 + plru[2];
+
+			plru[2] = plru[2] == 0 ? 1 : 0;
+			plru[0] = 0;
+			
+		}
+	}
+
+	return resultSet;
 
 }
 
