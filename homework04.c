@@ -20,37 +20,17 @@ typedef struct cache {
 // Prototypes
 void initialize(Cache* c);
 void LRU(int* lru, bool hit, int index);
-int hit(uint32_t aTag, Cache* c, uint32_t tagIndex);
-void LRUSim(uint32_t* addr, Cache* cache);
-void PLRUSim(uint32_t* addr, Cache* cache, int numHits);
+void LRUSim(uint32_t* addr);
+void PLRUSim(uint32_t* addr);
 
 int main(void) {
 
 	uint32_t addr[] = { 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280,
 						0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2C0, 0x250, 0x27C, 0x370, 0x394,
-						0x2dC, 0x284, 0x250, 0x2aC, 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344,
-						0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2C0,
-						0x250, 0x27C, 0x370, 0x394, 0x2dC, 0x284, 0x250, 0x2aC, 0x158, 0x28c,
-						0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc,
-						0x154, 0x280, 0x2f0, 0x2C0, 0x250, 0x27C, 0x370, 0x394, 0x2dC, 0x284,
-						0x250, 0x2aC, 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398,
-						0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2C0, 0x250, 0x27C,
-						0x370, 0x394, 0x2dC, 0x284, 0x250, 0x2aC };
+						0x2dC, 0x284, 0x250, 0x2aC };
 
-	// Initialize cache for LRU
-	Cache cache[4];
-	initialize(cache);
-
-	int numHits = 0;
-
-	LRUSim(addr, cache);
-
-	numHits = 0;
-
-	// Reset cache for PLRU
-	initialize(cache);
-
-	PLRUSim(addr, cache, numHits);
+	LRUSim(addr);
+	PLRUSim(addr);
 
 	return 0;
 
@@ -58,112 +38,127 @@ int main(void) {
 
 
 // Simulates LRU cache
-void LRUSim(uint32_t* addr, Cache* cache) {
+void LRUSim(uint32_t* addr) {
+	printf("LRU SIMULATION\n\n");
+
+	// Initialize cache for LRU
+	Cache cache[4];
+	initialize(cache);
 
 	int numHits = 0;
 	int lru[4] = { 3, 2, 1, 0 };
 
-	// Load addr into cache
-	for (int i = 0; i < NUM_ADDR; i++) {
+	// Loop through addresses
+	for (int l = 0; l < 4; l++) {
+		for (int i = 0; i < 24; i++) {
+			// Parse data
+			int tagIndex = (addr[i] >> 4) & 0x3;
+			int dataIndex = (addr[i] >> 2) & 0xf;
+			int aTag = addr[i] >> 6;
 
-		// Parse values
-		uint32_t cacheIndex = 0;
-		uint32_t tagIndex = (addr[i] >> 4) & 0x3;
-		uint32_t dataIndex = ((addr[i] >> 2) & 0xf);
-		uint32_t aTag = addr[i] >> 6;
+			int hit = -1;
 
-		// Check for hit
-		//int hitIndex = hit(aTag, cache, tagIndex);
-
-		int hitIndex = -1;
-
-		for (int j = 0; j < NUM_WAY; j++) {
-			if ((cache[j].tag[tagIndex].valid == 1) && (cache[j].tag[tagIndex].value == aTag)) {
-				hitIndex = j;
+			// Check if hit or miss
+			for (int j = 0; j < 4; j++) {
+				if (cache[j].tag[tagIndex].valid == 1 && cache[j].tag[tagIndex].value == aTag) {
+					hit = j;
+				}
 			}
+
+			int cacheHit = 0;
+
+			// Fill cache and update LRU
+			if (hit != -1) {
+				numHits++;
+
+				LRU(lru, true, hit);
+				cacheHit = lru[0];
+			}
+			else {
+				LRU(lru, false, hit);
+				cacheHit = lru[0];
+
+				// Write to cache
+				cache[cacheHit].tag[tagIndex].value = aTag;
+				cache[cacheHit].tag[tagIndex].valid = 1;
+			}
+
+			printf("    | Seq# %d, 0x%x| Way# %d\n", (i + 1) + (l * 24), addr[i], cacheHit);
+			printf("| V |   c.tag = %d |   c.data   |    c.data.index = %d\n", aTag, dataIndex);
+			printf("| %d |                    D0     |   c.tag.index  = %d\n", cache[cacheHit].tag[tagIndex].valid, tagIndex);
+			printf("|   |                    D1     |  History Stack = %d,%d,%d,%d\n", lru[0], lru[1], lru[2], lru[3]);
+			printf("|   |                    D2     |         Status = %s\n", (hit == -1) ? "Miss" : "Hit");
+			printf("|   |                    D3     |\n");
+			printf("\n\n");
 		}
-
-		// Update cache on miss and update LRU
-		if (hitIndex == -1) {
-			cacheIndex = lru[3];
-
-			// Write to cache
-			cache[cacheIndex].tag[tagIndex].value = aTag;
-			cache[cacheIndex].tag[tagIndex].valid = 1;
-
-			// Update LRU
-			LRU(lru, false, hitIndex);
-		}
-		else {
-			cacheIndex = hitIndex;
-
-			// Update LRU
-			LRU(lru, true, hitIndex);
-			numHits += 1;
-		}
-
-		printf("    | Seq# %d, 0x%x| Way# %d\n", i+1, addr[i], (hitIndex == -1) ? cacheIndex : hitIndex);
-		printf("| V |   c.tag = %d |   c.data   |    c.data.index = %d\n", aTag, dataIndex);
-		printf("| %d |                    D0     |   c.tag.index  = %d\n", cache[cacheIndex].tag[tagIndex].valid, tagIndex);
-		printf("|   |                    D1     |  History Stack = %d,%d,%d,%d\n", lru[0], lru[1], lru[2], lru[3]);
-		printf("|   |                    D2     |         Status = %s\n", (hitIndex == -1) ? "Miss" : "Hit");
-		printf("|   |                    D3     |\n");
-		printf("Hit Count = %d\n", numHits);
-		printf("\n\n");
 
 	}
 
-	printf("Number of hits: %d\n", numHits);
+	printf("Number of LRU hits: %d\n", numHits);
 	printf("LRU Efficiency: %f\n\n", ((float)numHits / 96) * 100);
+	puts("");
 }
 
 // Simulate pseudo-LRU
-void PLRUSim(uint32_t* addr, Cache* cache, int numHits) {
+void PLRUSim(uint32_t* addr) {
+	printf("\n\n\n");
+	printf("PSEUDO-LRU SIMULATION:\n\n");
+
+	// Initialize cache for PLRU
+	Cache cache[4];
+	initialize(cache);
+
+	int numHits = 0;
+
 	// Initialize pseudo-LRU
 	int plru[3] = { 0 };
 
 	// Load addr into cache using PLRU
-	for (int i = 0; i < NUM_ADDR; i++) {
+	for (int l = 0; l < 4; l++) {
+		for (int i = 0; i < 24; i++) {
 
-		// Parse values
-		uint32_t cacheIndex = 0;
-		uint32_t tagIndex = (addr[i] >> 4) & 0x3;
-		uint32_t dataIndex = ((addr[i] >> 2) & 0xf);
+			// Parse values
+			uint32_t cacheIndex = 0;
+			uint32_t tagIndex = (addr[i] >> 4) & 0x3;
+			uint32_t dataIndex = ((addr[i] >> 2) & 0xf);
+			uint32_t aTag = addr[i] >> 6;
+			int hitIndex = -1;
 
-		// I only want first 2 bits of dataIndex due data array stored inside tag
-		uint32_t dataIndexUpdated = dataIndex & 0x3;
-		uint32_t aTag = addr[i] >> 6;
-
-		// Check for hit
-		int hitIndex = hit(aTag, cache, tagIndex);
-
-		// Update cache on miss and update PLRU
-		if (hitIndex == -1) {
-			cacheIndex = PLRU(plru, false, hitIndex);
-
-			// Write to cache
-			cache[cacheIndex].tag[tagIndex].value = aTag;
-			cache[cacheIndex].tag[tagIndex].valid = 1;
-
-			// Fill with fake data
-			for (int k = 0; k < 4; k++) {
-				cache[cacheIndex].tag[tagIndex].data[k] = k + 5;
+			// Check if hit or miss
+			for (int j = 0; j < 4; j++) {
+				if (cache[j].tag[tagIndex].valid == 1 && cache[j].tag[tagIndex].value == aTag) {
+					hitIndex = j;
+				}
 			}
 
-		}
-		else {
-			// Update PLRU
-			cacheIndex = PLRU(plru, true, hitIndex);
-			numHits++;
-		}
+			// Update cache on miss and update PLRU
+			if (hitIndex == -1) {
+				cacheIndex = PLRU(plru, false, hitIndex);
 
-		printf("    | Seq# %d   | Way# %d\n", i+1, (hitIndex == -1) ? cacheIndex : hitIndex);
-		printf("| V |   c.tag   |   c.data   |    c.data.index = %d\n", dataIndex);
-		printf("\n\n");
+				// Write to cache
+				cache[cacheIndex].tag[tagIndex].value = aTag;
+				cache[cacheIndex].tag[tagIndex].valid = 1;
+
+			}
+			else {
+				// Update PLRU
+				cacheIndex = PLRU(plru, true, hitIndex);
+				numHits++;
+			}
+
+			printf("    | Seq# %d, 0x%x| Way# %d\n", (i + 1) + (l * 24), addr[i], cacheIndex);
+			printf("| V |   c.tag = %d |   c.data   |    c.data.index = %d\n", aTag, dataIndex);
+			printf("| %d |                    D0     |   c.tag.index  = %d\n", cache[cacheIndex].tag[tagIndex].valid, tagIndex);
+			printf("|   |                    D1     |  History Stack = b%d%d%d\n", plru[2], plru[0], plru[1]);		// Adjusting printing of PRLU arrows to fit example from class (my arrangement works the same way, but arrows are in different order)
+			printf("|   |                    D2     |         Status = %s\n", (hitIndex == -1) ? "Miss" : "Hit");
+			printf("|   |                    D3     |\n");
+			printf("\n\n");
+		}
 	}
 
-	printf("Number of hits: %d\n", numHits);
+	printf("Number of PLRU hits: %d\n", numHits);
 	printf("PLRU Efficiency: %f", ((float)numHits / 96) * 100);
+	puts("");
 }
 // Update PLRU for least recent used set
 int PLRU(int* plru, bool hit, int hitIndex) {
@@ -240,25 +235,6 @@ int PLRU(int* plru, bool hit, int hitIndex) {
 
 }
 
-// Returns hit or miss if value is in cache
-int hit(uint32_t aTag, Cache* c, uint32_t tagIndex) {
-
-	Cache way0 = c[0];
-	Cache way1 = c[1];
-	Cache way2 = c[2];
-	Cache way3 = c[3];
-
-	// Loop through all caches
-	for (int i = 0; i < NUM_WAY; i++) {
-		if (c[i].tag[tagIndex].valid == 1) {
-			if (c[i].tag[tagIndex].value == aTag) {
-				return i;
-			}
-		}
-	}
-	return -1;
-}
-
 // Sets all data and tag values to 0, sets all valid bits to 0
 void initialize(Cache* c) {
 	for (int i = 0; i < NUM_WAY; i++) {
@@ -267,10 +243,6 @@ void initialize(Cache* c) {
 		for (int j = 0; j < (sizeof(c[i].tag) / sizeof(c[i].tag[j])); j++) {
 			c[i].tag[j].value = 0;
 			c[i].tag[j].valid = 0;
-
-			for (int k = 0; k < 4; k++) {
-				c[i].tag[j].data[k] = 0;
-			}
 		}
 
 	}
@@ -287,7 +259,7 @@ void LRU(int* lru, bool hit, int index) {
 	}
 
 	// Check if hit or miss
-	if (hit && index != 3) {
+	if (index != -1) {
 		// Move hit line to MRU position
 		int mru = lru[index];
 
