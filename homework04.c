@@ -18,21 +18,24 @@ typedef struct cache {
 } Cache;
 
 // Prototypes
-void displayCache(Cache* c);
 void initialize(Cache* c);
 void LRU(int* lru, bool hit, int index);
 int hit(uint32_t aTag, Cache* c, uint32_t tagIndex);
-void LRUSim(uint32_t* addr, Cache* cache, int numHits);
+void LRUSim(uint32_t* addr, Cache* cache);
 void PLRUSim(uint32_t* addr, Cache* cache, int numHits);
 
 int main(void) {
 
-	uint32_t addr[] = { 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2c0, 0x250,
-		0x27c, 0x370, 0x394, 0x2dc, 0x284, 0x250, 0x2ac, 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc,
-		0x154, 0x280, 0x2f0, 0x2c0, 0x250, 0x27c, 0x370, 0x394, 0x2dc, 0x284, 0x250, 0x2ac, 0x158, 0x28c, 0x2fc, 0x200, 0x314, 0x344, 0x374,
-		0x398, 0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2c0, 0x250, 0x27c, 0x370, 0x394, 0x2dc, 0x284, 0x250, 0x2ac, 0x158, 0x28c,
-		0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2c0, 0x250, 0x27c, 0x370, 0x394, 0x2dc,
-		0x284, 0x250, 0x2ac };
+	uint32_t addr[] = { 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280,
+						0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2C0, 0x250, 0x27C, 0x370, 0x394,
+						0x2dC, 0x284, 0x250, 0x2aC, 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344,
+						0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2C0,
+						0x250, 0x27C, 0x370, 0x394, 0x2dC, 0x284, 0x250, 0x2aC, 0x158, 0x28c,
+						0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398, 0x2d4, 0x280, 0x24c, 0x2bc,
+						0x154, 0x280, 0x2f0, 0x2C0, 0x250, 0x27C, 0x370, 0x394, 0x2dC, 0x284,
+						0x250, 0x2aC, 0x158, 0x28c, 0x2fc, 0x300, 0x314, 0x344, 0x374, 0x398,
+						0x2d4, 0x280, 0x24c, 0x2bc, 0x154, 0x280, 0x2f0, 0x2C0, 0x250, 0x27C,
+						0x370, 0x394, 0x2dC, 0x284, 0x250, 0x2aC };
 
 	// Initialize cache for LRU
 	Cache cache[4];
@@ -40,7 +43,7 @@ int main(void) {
 
 	int numHits = 0;
 
-	LRUSim(addr, cache, numHits);
+	LRUSim(addr, cache);
 
 	numHits = 0;
 
@@ -55,8 +58,9 @@ int main(void) {
 
 
 // Simulates LRU cache
-void LRUSim(uint32_t* addr, Cache* cache, int numHits) {
+void LRUSim(uint32_t* addr, Cache* cache) {
 
+	int numHits = 0;
 	int lru[4] = { 3, 2, 1, 0 };
 
 	// Load addr into cache
@@ -66,13 +70,18 @@ void LRUSim(uint32_t* addr, Cache* cache, int numHits) {
 		uint32_t cacheIndex = 0;
 		uint32_t tagIndex = (addr[i] >> 4) & 0x3;
 		uint32_t dataIndex = ((addr[i] >> 2) & 0xf);
-
-		// I only want first 2 bits of dataIndex due data array stored inside tag
-		uint32_t dataIndexUpdated = dataIndex & 0x3;
 		uint32_t aTag = addr[i] >> 6;
 
 		// Check for hit
-		int hitIndex = hit(aTag, cache, tagIndex);
+		//int hitIndex = hit(aTag, cache, tagIndex);
+
+		int hitIndex = -1;
+
+		for (int j = 0; j < NUM_WAY; j++) {
+			if ((cache[j].tag[tagIndex].valid == 1) && (cache[j].tag[tagIndex].value == aTag)) {
+				hitIndex = j;
+			}
+		}
 
 		// Update cache on miss and update LRU
 		if (hitIndex == -1) {
@@ -82,11 +91,6 @@ void LRUSim(uint32_t* addr, Cache* cache, int numHits) {
 			cache[cacheIndex].tag[tagIndex].value = aTag;
 			cache[cacheIndex].tag[tagIndex].valid = 1;
 
-			// Fill with fake data
-			for (int k = 0; k < 4; k++) {
-				cache[cacheIndex].tag[tagIndex].data[k] = k + 5;
-			}
-
 			// Update LRU
 			LRU(lru, false, hitIndex);
 		}
@@ -95,21 +99,22 @@ void LRUSim(uint32_t* addr, Cache* cache, int numHits) {
 
 			// Update LRU
 			LRU(lru, true, hitIndex);
-			numHits++;
+			numHits += 1;
 		}
 
-		printf("    | Seq# %d   | Way# %d\n", i+1, (hitIndex == -1) ? cacheIndex : hitIndex);
+		printf("    | Seq# %d, 0x%x| Way# %d\n", i+1, addr[i], (hitIndex == -1) ? cacheIndex : hitIndex);
 		printf("| V |   c.tag = %d |   c.data   |    c.data.index = %d\n", aTag, dataIndex);
 		printf("| %d |                    D0     |   c.tag.index  = %d\n", cache[cacheIndex].tag[tagIndex].valid, tagIndex);
 		printf("|   |                    D1     |  History Stack = %d,%d,%d,%d\n", lru[0], lru[1], lru[2], lru[3]);
 		printf("|   |                    D2     |         Status = %s\n", (hitIndex == -1) ? "Miss" : "Hit");
 		printf("|   |                    D3     |\n");
+		printf("Hit Count = %d\n", numHits);
 		printf("\n\n");
 
 	}
 
 	printf("Number of hits: %d\n", numHits);
-	printf("LRU Efficiency: %f", ((float)numHits / 96) * 100);
+	printf("LRU Efficiency: %f\n\n", ((float)numHits / 96) * 100);
 }
 
 // Simulate pseudo-LRU
@@ -237,6 +242,12 @@ int PLRU(int* plru, bool hit, int hitIndex) {
 
 // Returns hit or miss if value is in cache
 int hit(uint32_t aTag, Cache* c, uint32_t tagIndex) {
+
+	Cache way0 = c[0];
+	Cache way1 = c[1];
+	Cache way2 = c[2];
+	Cache way3 = c[3];
+
 	// Loop through all caches
 	for (int i = 0; i < NUM_WAY; i++) {
 		if (c[i].tag[tagIndex].valid == 1) {
